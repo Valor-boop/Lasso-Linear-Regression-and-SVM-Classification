@@ -1,0 +1,110 @@
+function a5q1_20060920
+% A5Q1: function for CISC371, Fall 2021, Assignment #5, Question #1
+% Ridge regression and the lasso
+
+    % Read the commodities data from a CSV file
+    [Xmat yvec] = getmtls;
+    [m n] = size(Xmat);
+
+    % Find the commodities regression in unstandardized variables
+    wols = Xmat\yvec;
+
+    % %
+    % % STUDENT CODE GOES HERE:
+    % % Compute a lasso with 5-fold cross-validation
+    % %
+    rng('default');
+    [Bmat lassoStruct] = lasso(Xmat, yvec, 'CV', 5);
+    Bmat
+    lassoStruct.IndexMinMSE
+    % %
+    % % STUDENT CODE GOES HERE:
+    % % Find the selected variables BVEC
+    % % Is BVEC bmat * wols? 
+    bvec = Bmat(:, lassoStruct.IndexMinMSE);
+    
+    % %
+    % % STUDENT CODE GOES HERE:
+    % % Plot the linear regression with all variables
+    % %
+    figure(1);
+    plot(1:m, yvec, ['k' 'o'], ...
+        1:m, (Xmat*wols), ['b' '-']);
+    axvec = axis;
+    legend('Data', sprintf('% -2d DOF',n-1), ...
+        'Location', 'NorthWest');
+
+    % %
+    % % STUDENT CODE GOES HERE:
+    % % Plot the regularization hyper-parameters
+    % %
+    figure(2);
+    ph=lassoPlot(Bmat, lassoStruct, 'PlotType', 'CV', ...
+        'Parent', gca);
+    legend('show');
+    set(gca,'ytick',[]);
+
+    % %
+    % % STUDENT CODE GOES HERE:
+    % % Plot the lasso traces
+    % %
+    figure(3);
+    lassoPlot(Bmat,lassoStruct, 'PlotType', 'Lambda',...
+    'XScale', 'log', 'Parent', gca);
+    %lassofix(2);
+    legend('show');
+
+    % %
+    % % Plot the data, OLS fit, and lasso regression
+    % %
+    figure(4);
+    plot(1:m, yvec, ['k' 'o'], ...
+        1:m, (Xmat*wols), ['b' '-'], ...
+        1:m, (Xmat*bvec), ['r' '-']);
+    axvec = axis;
+    axis([axvec(1:2) 0 axvec(4)]);
+    xlabel('\bf{}Quarterly index from 1992Q1', ...
+        'Interpreter', 'latex');
+    ylabel('\bf{}Commodity Price (USD, \$)', ...
+        'Interpreter', 'latex');
+    title(sprintf('\\bf{}Lasso Regression of Commodities'), ...
+        'Interpreter', 'latex');
+    legend('Data', sprintf('% -2d DOF', n), sprintf('% -2d DOF', lassoStruct.DF(lassoStruct.IndexMinMSE)), 'Location', 'Northwest');
+end
+
+function [Xmat yvec] = getmtls
+% [XMAT YVEC]=GETMTLS finds an  X matrix of independent data and
+% a vector YVEC of dependent data from CSV files in the
+% directory DATA. Missing data are filled with the median values
+% of that column.
+%
+% INPUTS:
+%         none
+% OUTPUTS:
+%         XMAT - MxN array of unstandardized commodities prices
+%         YVEC - Mx1 vector of dependent commodities prices
+
+    % Read the test data from a CSV file; find the size of the data
+    Xmtls_raw = (csvread('Xmtls.csv', 1, 1));
+    [m n] = size(Xmtls_raw);
+    Ymtls_raw = (csvread('Ymtls.csv', 1, 1));
+
+    % %
+    % % STUDENT CODE GOES HERE:
+    % % Handle missing data
+
+    for i = 1:m
+        for j = 1:n
+            if Xmtls_raw (i,j) == 0
+                Xmtls_raw (i-5:i-1,j);
+                mean(Xmtls_raw (i-5:i-1,j)) ;
+                Xmtls_raw (i,j) = mean(Xmtls_raw (i-5:i-1,j));
+            end
+        end
+    end
+
+    % Create Xmat and yvec from the data and the input parameter,
+    % accounting for no standardization of data
+    Xmat = Xmtls_raw;
+    yvec = Ymtls_raw;
+end

@@ -1,0 +1,316 @@
+function a5q3_20060920
+% A5Q3: function for CISC371, Fall 2021, Assignment #5, Question #3
+
+    % Size of plots
+    axvec = [-4 4 -4 4];
+
+    % Size of fonts, line width
+    aFont = 14;
+    tFont = 14;
+    lWidth = 1.5;
+    mWidth = 8;
+
+    % Import the 5D data
+    load('a5data5d.txt');
+
+    % Extract the label vector
+    yvec = a5data5d(:,6);
+
+    % %
+    % % STUDENT CODE: DIMENSIONALITY REDUCTION GOES HERE
+    % % Replace this line of code with correct dimensionality reduction
+    % %
+    %xmat = 10*(zscore(a5data5d(:,1:2))/sqrt(size(a5data5d,1)-1))'
+    stdM = zscore(a5data5d);
+    [U, S, V] = svd(stdM);
+    
+    sv1 = V(:,1);
+    sv2 = V(:,2);
+    Svec = [sv1, sv2];
+    % score vector 
+    xmat = (stdM * Svec)';
+    %U1 = U(:,1)
+    %U2 = U(:,2);
+    %Uvec = [U1, U2];
+    %stdMV = [stdM(:,1), stdM(:,2)]
+    %xmat = (stdMV * Uvec')
+    % Plot the data vectors
+    fh = plotclass2d(xmat, yvec);
+    set(fh, 'MarkerSize', mWidth, 'LineWidth', lWidth);
+    axis(axvec);
+    axis('square');
+
+
+    % Compute the SVM
+    % %
+    % % STUDENT CODE: SVM CODE GOES HERE
+    % % Replace this line of code with Gaussian SVM
+    % %
+   svmClassStruct = fitcsvm(xmat', yvec, 'KernelFunction', 'rbf', ...
+    'Standardize', false, 'KernelScale', 1);
+
+% Plot the decision curve on top of the data
+if strcmp(svmClassStruct.KernelParameters.Function, 'gaussian')
+    % Decision curve is the zero contour of the decision surface
+    svmcontour(svmClassStruct, lWidth);
+    
+elseif strcmp(svmClassStruct.KernelParameters.Function, 'linear')
+    % Represent the line as: the normal vector augmented with the bias
+    wvec = [svmClassStruct.Beta ; svmClassStruct.Bias];
+
+    % SVM returns an indefinite normal vector for poorly fit data
+    if (norm(wvec(1:2)) < 1e-3)
+        wvec = [1 ; 1 ; 0];
+    end
+    
+    % Decision curve is a line; plot using the augmented vector
+    plotline(wvec, 'k', lWidth);
+end
+
+% Label the axes and title
+xlabel('\boldmath$x_1$', 'Interpreter', 'latex', 'FontSize', aFont);
+ylabel('\boldmath$x_2$', 'Interpreter', 'latex', 'FontSize', aFont);
+title('\bf A5Q3: decision curve', ...
+    'Interpreter', 'latex', 'FontSize', tFont);
+
+% Find the scores and the ratio of correct predictions
+[scorevec, cval] = svmgausscheck(svmClassStruct, xmat, yvec);
+disp(sprintf('A5Q3: classified %0.2f%% correctly', 100*cval));
+end
+
+function [scorevec cval] = svmgausscheck(svmStruct, xmat, yvec)
+% [SCOREVEC CVAL]=SVMGAUSSCHECK(SVMSTRUCT,XMAT,YVEC) checks the
+% predictions of a Gaussian SVM against the user's labels.
+% XMAT is the design matrix, YVEC is the data vector, and
+% SVMSTRUCT is the structure from "fitcsvm". The scores are
+% returned in SVEC and the ratio of correct labels is in CVAL.
+%
+% INPUTS:
+%         SVMSTRUCT - structure returned by "fitcsvm"
+%         XMAT      - MxN design matric, columns are variables
+%         YVEC      - Mx1 labels as {-1,+1}
+% OUTPUTS:
+%         SCOREVEC  - Mx1 vectors of real-values scores
+%         CVAL      - ratio of correct to the M observations
+
+% Verify that the SVM structure uses a Gaussian kernel 
+scorevec = [];
+cval = 0;
+if ~strcmp(svmStruct.KernelParameters.Function,'gaussian')
+    return;
+end
+
+% Problem size
+[xm xn] = size(xmat);
+
+% Shorthand for: matrix of support vectors (transposed), RBF gamma, bias
+smatT = svmStruct.SupportVectors;
+gamma = svmStruct.KernelParameters.Scale;
+bias = svmStruct.Bias;
+
+% Number of support vectors
+sm = size(smatT, 1);
+
+% Loop over the data vectors
+oknum = 0;
+scorevec = zeros(xm, 1);
+for jx = 1:xm
+    % Shorthand for this data vector
+    thisX = xmat(:, jx);
+    
+    % Loop over the support vectors
+    score = 0;
+    for ix = 1:sm
+        % %
+        % % STUDENT CODE: ADD THIS SUPPORT SCORE TO THE RUNNING SCORE
+        % %
+        % Shorthand for: support vector; label; this alpha; this score
+        % use equation 32.13
+        alpha = svmStruct.Alpha;
+        label = svmStruct.SupportVectorLabels;
+        score = score + (exp(-gamma*norm(thisX'-smatT(ix, :)).^2) + bias) * alpha(ix, :) * label(ix, :);
+    end
+    scorevec(jx) = score;
+    oknum = oknum + (yvec(jx) == sign(score));
+end
+
+% Return the ration of correct scores
+cval = oknum/xm;
+end
+
+% %
+% % NO STUDENT CHANGES NEEDED BELOW HERE
+% %
+
+function ph = svmcontour(svmStruct,lWidth)
+% SVMCONTOUR(SVMSTRUCT,LWIDTH) plots a decision contour
+% into an existing figure
+% INPUTS:
+%        SVMSTRUCT - structure returned by "fitcsvm"
+%        LWIDTH    - scalar, line width for plotting
+% OUTPUT:
+%        PH   - plot handle for the current figure
+% SIDE EFFECTS:
+%        Plot into the current window. 
+
+% Axis scale factor, contour density parameter
+xScale = 1;
+denval = 1000;
+
+% Current axis vector
+axvec = axis();
+
+% Create a plot grid from the current axis settings
+x1l = axvec(1)*xScale;
+x1u = axvec(2)*xScale;
+x2l = axvec(3)*xScale;
+x2u = axvec(4)*xScale;
+
+% Grid for showing the decision curve
+[d1grid, d2grid] = meshgrid(linspace(x1l, x1u, denval), ...
+    linspace(x2l, x2u, denval));
+dgrid = [d1grid(:), d2grid(:)];
+
+% Use a dense grid to evaluate the kernel decision curve
+[~, dScores] = predict(svmStruct, dgrid);
+scoreGrid = reshape(dScores(:,2),size(d1grid,1), size(d2grid,2));
+
+% Superimpose a black curve
+hold on;
+ph = contour(d1grid,d2grid, scoreGrid, [0 0], 'k', 'LineWidth', lWidth);
+hold off;
+line([0 0], ylim, 'LineStyle', '--');
+line(xlim, [0 0], 'LineStyle', '--');
+end
+
+function ph = plotclass2d(dmat, lvec, lw)
+% PH=PLOTCLASS(DMAT,LVEC,LW) plots a 2d data set DMAT
+% for binary classification using characters in LVEC
+%
+% INPUTS:
+%        DMAT - 2xN data matrix
+%        LVEC - Nx1 binary classification
+%        LW   - optional scalar, line width for plotting symbols
+% OUTPUT:
+%        PH   - plot handle for the current figure
+% SIDE EFFECTS:
+%        Plot into the current window. Low-valued labels are shown
+%        as red circles and high-valued labels are shown as
+%        blue "+". Optionally, LW is the line width.
+%        Axes are slightly adjusted to improve legibility.
+
+% Set the line width
+if nargin >= 3 & ~isempty(lw)
+  lwid = lw;
+else
+  lwid = 2;
+end
+
+ph = gscatter(dmat(1,:),dmat(2,:),lvec, ...
+    'rb', 'o+', [], 'off');
+set(ph, 'LineWidth', lwid);
+axisadjust(1.1);
+end
+
+function axisadjust(axisexpand)
+% AXISADJUST(AXISEXPAND) multiplies the current plot
+% ranges by AXISEXPAND.  To increase by 5%, use 1.05
+%
+% INPUTS:
+%         AXISEXPAND - positive scalar multiplier
+% OUTPUTS:
+%         none
+% SIDE EFFECTS:
+%         Changes the current plot axis
+
+axvec = axis();
+axwdth = (axvec(2) - axvec(1))/2;
+axhght = (axvec(4) - axvec(3))/2;
+axmidw = mean(axvec([1 2]));
+axmidh = mean(axvec([3 4]));
+axis([axmidw-axisexpand*axwdth , axmidw+axisexpand*axwdth , ...
+      axmidh-axisexpand*axhght , axmidh+axisexpand*axhght]);
+end
+
+function ph = plotline(vvec, color, lw, nv)
+% PLOTLINE(VVEC,COLOR,LW) plots a separating line
+% into an existing figure
+% INPUTS:
+%        VVEC   - (M+1) augmented weight vector
+%        COLOR  - character, color to use in the plot
+%        LW   - optional scalar, line width for plotting symbols
+%        NV   - optional logical, plot the normal vector
+% OUTPUT:
+%        PH   - plot handle for the current figure
+% SIDE EFFECTS:
+%        Plot into the current window. 
+
+% Set the line width
+if nargin >= 3 & ~isempty(lw)
+  lwid = lw;
+else
+  lwid = 2;
+end
+
+% Set the normal vector
+if nargin >= 4 & ~isempty(nv)
+  do_normal = true;
+else
+  do_normal = false;
+end
+
+% Scale factor for the normal vector
+sval = 0.15;
+
+% Current axis settings
+axin = axis();
+
+% Four corners of the current axis
+ll = [axin(1) ; axin(3)];
+lr = [axin(2) ; axin(3)];
+ul = [axin(1) ; axin(4)];
+ur = [axin(2) ; axin(4)];
+
+% Normal vector, direction vector, hyperplane scalar
+nlen = norm(vvec(1:2));
+uvec = vvec/nlen;
+nvec = uvec(1:2);
+dvec = [-uvec(2) ; uvec(1)];
+bval = uvec(3);
+
+% A point on the hyperplane
+pvec = -bval*nvec;
+
+% Projections of the axis corners on the separating line
+clist = dvec'*([ll lr ul ur] - pvec);
+cmin = min(clist);
+cmax = max(clist);
+
+% Start and end are outside the current plot axis, no problem
+pmin = pvec +cmin*dvec;
+pmax = pvec +cmax*dvec;
+
+% Create X and Y coordinates of a box for the current axis
+xbox = [axin(1) axin(2) axin(2) axin(1) axin(1)];
+ybox = [axin(3) axin(3) axin(4) axin(4) axin(3)];
+
+% Intersections of the line and the box
+[xi, yi] = polyxpoly([pmin(1) pmax(1)], [pmin(2) pmax(2)], xbox, ybox);
+
+% Point midway between the intersections
+pmid = [mean(xi) ; mean(yi)];
+
+% Range of the intersection line
+ilen = norm([(max(xi) - min(xi)) ; (max(yi) - min(yi))]);
+
+% Plot the line and re-set the axis to its original
+hold on;
+ph = plot([pmin(1) pmax(1)], [pmin(2) pmax(2)], ...
+    strcat(color, '-'), 'LineWidth', lwid);
+if do_normal
+    quiver(pmid(1), pmid(2), nvec(1)*ilen*sval, nvec(2)*ilen*sval, ...
+        color, 'LineWidth', lwid, 'MaxHeadSize', ilen/2, ...
+        'AutoScale', 'off');
+end
+hold off;
+end
